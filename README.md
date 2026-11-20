@@ -106,21 +106,31 @@ docker build -f backend/Dockerfile -t campusfind .
 docker run -p 8080:80 campusfind
 ```
 
-## Live frontend + hosted API (Vercel + Render)
+## Docker + MySQL (simple deployment)
 
-Because Vercel has no PHP runtime, the Vercel deployment serves only the React UI. To make login/registration work there, host the Laravel API separately (e.g. on Render using the included `render.yaml`) and point Vercel at it.
+The full app — React UI, Laravel API, and MySQL — runs in Docker. There are two ways:
 
-1. Deploy the API with `render.yaml` (Blueprint → `render.yaml`). It builds `backend/Dockerfile`, creates a Postgres database, migrates, and seeds.
-2. In the Render service environment, set:
-   - `APP_URL` = your Render service URL
-   - `CORS_ALLOWED_ORIGINS` = your Vercel URL, e.g. `https://kathon.vercel.app`
-   - `SANCTUM_STATEFUL_DOMAINS` = your Vercel host only, e.g. `kathon.vercel.app`
-   - `SESSION_DOMAIN` = leave empty
-3. In Vercel → Project → Environment Variables, set:
-   - `VITE_API_URL` = `https://your-render-service.onrender.com/api`
-4. Redeploy both. Sanctum uses `SameSite=None; Secure` cookies (set by `SESSION_SAME_SITE=none` and `SESSION_SECURE_COOKIE=true`) so the cookie is sent cross-site.
+### Locally (easiest)
 
-> Cross-origin cookie auth requires both sites to be HTTPS. `*.vercel.app` and `*.onrender.com` are HTTPS by default.
+```powershell
+docker compose up --build
+```
+
+Open `http://localhost:8080`. MariaDB (MySQL-compatible) is included automatically, and the demo accounts are seeded on first run.
+
+### On a host such as Render
+
+Use the included `render.yaml` (Blueprint). It builds `backend/Dockerfile` — the whole app on one service — with MySQL. Add your MySQL connection values when prompted:
+
+| Key | Value |
+|---|---|
+| `APP_URL` | your service URL |
+| `DB_HOST` | your MySQL host |
+| `DB_USERNAME` | your MySQL user |
+| `DB_PASSWORD` | your MySQL password |
+| `CORS_ALLOWED_ORIGINS` | only if the UI is on a different domain |
+
+`DB_PORT` defaults to `3306` and `DB_DATABASE` to `campus_lost_found`.
 
 ## Demo accounts
 
