@@ -78,6 +78,34 @@ The frontend API URL is set in `frontend/.env`:
 VITE_API_URL=http://localhost:8000/api
 ```
 
+## Docker (full stack)
+
+Run the complete app — MariaDB, Laravel API, and the React UI — in containers. The UI and API are served from one origin at `http://localhost:8080`.
+
+```powershell
+docker compose up --build
+```
+
+On first start the container waits for the database, runs migrations, and seeds the demo accounts. Stop with `docker compose down` (add `-v` to also erase the database volume).
+
+To reuse your existing `APP_KEY`, uncomment the `APP_KEY` line in `docker-compose.yml` and paste the value from `backend/.env`.
+
+### Docker files
+
+| File | Purpose |
+|---|---|
+| `docker-compose.yml` | App + MariaDB services, volumes, environment |
+| `backend/Dockerfile` | Full-stack image (PHP 8.2 + Apache, builds the React app) |
+| `backend/docker-entrypoint.sh` | Waits for DB, migrates, seeds once, links storage |
+| `Dockerfile` (root) | Frontend-only image (nginx) for static hosts like Vercel/Render |
+
+Build the full-stack image by hand:
+
+```powershell
+docker build -f backend/Dockerfile -t campusfind .
+docker run -p 8080:80 campusfind
+```
+
 ## Demo accounts
 
 | Role | Email | Password |
