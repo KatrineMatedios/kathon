@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
 
+# Force the self-contained database (overrides any stale host env vars)
+export DB_CONNECTION=mysql
+export DB_HOST=127.0.0.1
+export DB_PORT=3306
+export DB_DATABASE=campus_lost_found
+export DB_USERNAME=root
+export DB_PASSWORD=
+export SESSION_DRIVER=file
+export SESSION_DOMAIN=
+
 # ---- Start MariaDB ----
 mkdir -p /run/mysqld
 chown mysql:mysql /run/mysqld
@@ -43,6 +53,8 @@ if [ -n "${RENDER_EXTERNAL_URL:-}" ]; then
     grep -q '^CORS_ALLOWED_ORIGINS=' .env 2>/dev/null \
         && sed -i "s|^CORS_ALLOWED_ORIGINS=.*|CORS_ALLOWED_ORIGINS=${RENDER_EXTERNAL_URL}|" .env \
         || printf 'CORS_ALLOWED_ORIGINS=%s\n' "$RENDER_EXTERNAL_URL" >> .env
+    export SESSION_SECURE_COOKIE=true
+    export SESSION_SAME_SITE=lax
 fi
 
 # ---- Database ----
