@@ -3,41 +3,36 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\SupportTicketResource;
 use App\Models\SupportTicket;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 class SupportController extends Controller
 {
-    public function index()
+    public function index(Request $request): JsonResponse
     {
-        $tickets = Auth::user()->supportTickets()
-            ->orderBy('created_at', 'desc')
-            ->paginate(20)
-            ->withQueryString();
+        $tickets = SupportTicket::where('user_id', $request->user()->id)
+            ->with('user')->latest()->get()
+            ->map(fn (SupportTicket $t) => api_ticket($t))->values();
 
-        return SupportTicketResource::collection($tickets);
+        return response()->json(['data' => $tickets]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'subject' => ['required', 'string', 'max:150'],
-            'message' => ['required', 'string', 'min:10'],
+            'subject' => ['required', 'string', 'max:255'],
+            'message' => ['required', 'string'],
         ]);
 
-        $ticket = Auth::user()->supportTickets()->create($data);
-        $ticket->load('user');
+        $ticket = SupportTicket::create([
+            'user_id' => $request->user()->id,
+            'subject' => $data['subject'],
+            'message' => $data['message'],
+        ]);
 
-        notify_user(
-            Auth::user(),
-            'support_ticket_created',
-            'Support request received',
-            "Your support request “{$ticket->subject}” has been received."
-        );
-        log_activity('support_requested', "Submitted support request: {$ticket->subject}.", Auth::user(), SupportTicket::class, $ticket->id);
+        log_activity('support_requested', "Submitted support request: {$ticket->subject}.", 'support_ticket', $ticket->id, $request->user());
 
-        return (new SupportTicketResource($ticket))->additional(['message' => 'Support request submitted successfully.']);
+        return response()->json(['message' => 'Support request submitted successfully.', 'ticket' => api_ticket($ticket)], 201);
     }
 }

@@ -14,7 +14,6 @@ return new class extends Migration
             $table->string('path');
             $table->boolean('is_primary')->default(false);
             $table->timestamps();
-
             $table->index('item_id');
         });
     }

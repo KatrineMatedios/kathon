@@ -2,20 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class SupportTicket extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'user_id',
-        'subject',
-        'message',
-        'status',
-        'admin_response',
-        'responded_at',
+        'user_id', 'subject', 'message', 'status', 'admin_response',
+        'responded_by', 'responded_at',
     ];
 
     protected function casts(): array
@@ -23,8 +16,5 @@ class SupportTicket extends Model
         return ['responded_at' => 'datetime'];
     }
 
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
+    public function user() { return $this->belongsTo(User::class); }
 }

@@ -3,210 +3,199 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\ClaimResource;
-use App\Http\Resources\ItemResource;
-use App\Models\Category;
+use App\Models\Claim;
 use App\Models\Item;
-use App\Models\ItemImage;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 class ItemController extends Controller
 {
-    private const STATUSES = ['pending', 'approved', 'rejected', 'returned', 'resolved'];
-
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
-        $query = Item::with(['category', 'user', 'images'])
-            ->where('item_status', '!=', 'rejected');
+        $query = Item::query()->with(['category', 'reporter', 'images']);
 
-        $this->applyFilters($query, $request);
-
-        $sort = $request->input('sort', 'latest');
-        match ($sort) {
-            'oldest' => $query->orderBy('date_reported', 'asc'),
-            'name' => $query->orderBy('item_name', 'asc'),
-            default => $query->orderBy('date_reported', 'desc'),
-        };
-
-        return ItemResource::collection($query->paginate(12)->withQueryString());
-    }
-
-    public function store(Request $request)
-    {
-        return $this->createItem($request, $request->input('item_type'));
-    }
-
-    public function reportLost(Request $request)
-    {
-        return $this->createItem($request, 'lost');
-    }
-
-    public function reportFound(Request $request)
-    {
-        return $this->createItem($request, 'found');
-    }
-
-    public function show(int $id)
-    {
-        $item = Item::with(['category', 'user', 'images'])->findOrFail($id);
-
-        $isPrivileged = Auth::id() === $item->user_id || Auth::user()?->isAdmin();
-        $item->load($isPrivileged ? ['claims.claimant'] : ['claims' => fn ($q) => $q->where('claimant_id', Auth::id())]);
-
-        $myClaim = $item->claims->firstWhere('claimant_id', Auth::id());
-
-        return (new ItemResource($item))->additional([
-            'my_claim' => $myClaim ? new ClaimResource($myClaim) : null,
-        ]);
-    }
-
-    public function update(Request $request, int $id)
-    {
-        $item = Item::findOrFail($id);
-
-        if (Auth::id() !== $item->user_id && ! Auth::user()?->isAdmin()) {
-            return response()->json(['message' => 'You are not allowed to edit this report.'], 403);
+        if ($q = trim((string) $request->query('q', ''))) {
+            $query->where(function ($builder) use ($q) {
+                $builder->where('item_name', 'like', "%{$q}%")
+                    ->orWhere('description', 'like', "%{$q}%")
+                    ->orWhere('location', 'like', "%{$q}%");
+            });
         }
 
-        $data = $request->validate([
-            'item_name' => ['sometimes', 'required', 'string', 'max:150'],
-            'description' => ['sometimes', 'required', 'string'],
-            'category_id' => ['sometimes', 'nullable', 'exists:categories,id'],
-            'location' => ['sometimes', 'required', 'string', 'max:150'],
-            'lost_found_date' => ['sometimes', 'required', 'date'],
-            'additional_information' => ['sometimes', 'nullable', 'string'],
-            'images' => ['sometimes', 'array', 'max:5'],
-            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
-        ]);
-
-        unset($data['images']);
-
-        $item->update($data);
-        $this->storeImages($request, $item);
-        $item->load(['category', 'user', 'images']);
-
-        log_activity('report_updated', "Updated report #{$item->id} ({$item->item_name}).", Auth::user(), Item::class, $item->id);
-
-        return (new ItemResource($item))->additional(['message' => 'Report updated successfully.']);
-    }
-
-    public function destroy(int $id)
-    {
-        $item = Item::findOrFail($id);
-
-        if (Auth::id() !== $item->user_id && ! Auth::user()?->isAdmin()) {
-            return response()->json(['message' => 'You are not allowed to delete this report.'], 403);
+        if ($categoryId = $request->query('category_id')) {
+            $query->where('category_id', $categoryId);
+        }
+        if ($type = $request->query('item_type')) {
+            $query->where('item_type', $type);
+        }
+        if ($status = $request->query('status')) {
+            $query->where('item_status', $status);
+        } else {
+            $query->whereIn('item_status', ['approved', 'returned', 'resolved']);
         }
 
-        foreach ($item->images as $image) {
-            Storage::disk('public')->delete($image->path);
+        $sort = $request->query('sort', 'latest');
+        if ($sort === 'oldest') {
+            $query->oldest('date_reported');
+        } elseif ($sort === 'name') {
+            $query->orderBy('item_name');
+        } else {
+            $query->latest('date_reported');
         }
 
-        $name = $item->item_name;
-        $item->delete();
+        $perPage = max(1, min(100, (int) $request->query('per_page', 12)));
+        $paginator = $query->paginate($perPage);
+        $viewer = $request->user();
 
-        log_activity('report_deleted', "Deleted report #{$id} ({$name}).", Auth::user(), Item::class, $id);
-
-        return response()->json(['message' => 'Report deleted successfully.']);
+        return response()->json(paginated($paginator,
+            $paginator->getCollection()->map(fn (Item $i) => api_item($i, $viewer))->all()
+        ));
     }
 
-    public function myReports(Request $request)
+    public function myReports(Request $request): JsonResponse
     {
-        $query = Item::where('user_id', Auth::id())->with(['category', 'user', 'images']);
+        $perPage = max(1, min(100, (int) $request->query('per_page', 100)));
+        $paginator = Item::where('user_id', $request->user()->id)
+            ->with(['category', 'reporter', 'images'])
+            ->latest('date_reported')
+            ->paginate($perPage);
+        $viewer = $request->user();
 
-        $this->applyFilters($query, $request);
-        $query->orderBy('date_reported', 'desc');
-
-        return ItemResource::collection($query->paginate(12)->withQueryString());
+        return response()->json(paginated($paginator,
+            $paginator->getCollection()->map(fn (Item $i) => api_item($i, $viewer))->all()
+        ));
     }
 
-    public function categories()
+    public function show(Request $request, int $id): JsonResponse
     {
-        return response()->json([
-            'categories' => Category::where('is_active', true)->orderBy('name')->get(['id', 'name', 'icon']),
-        ]);
+        $item = Item::with(['category', 'reporter', 'images', 'claims.claimant'])->findOrFail($id);
+        $viewer = $request->user();
+        $data = api_item($item, $viewer);
+
+        $myClaim = $item->claims->firstWhere('claimant_id', $viewer?->id);
+        $data['my_claim'] = $myClaim ? api_claim($myClaim, $viewer) : null;
+        $data['claims'] = $item->claims->map(fn (Claim $c) => api_claim($c, $viewer))->values()->all();
+
+        return response()->json($data);
     }
 
-    private function createItem(Request $request, ?string $type): JsonResponse
+    public function store(Request $request): JsonResponse
+    {
+        return $this->createReport($request, (string) $request->input('item_type', 'lost'));
+    }
+
+    public function reportLost(Request $request): JsonResponse
+    {
+        return $this->createReport($request, 'lost');
+    }
+
+    public function reportFound(Request $request): JsonResponse
+    {
+        return $this->createReport($request, 'found');
+    }
+
+    private function createReport(Request $request, string $type): JsonResponse
     {
         $data = $request->validate([
-            'item_name' => ['required', 'string', 'max:150'],
-            'category_id' => ['required', 'exists:categories,id'],
-            'description' => ['required', 'string', 'min:10'],
-            'item_type' => [$type ? 'sometimes' : 'required', 'in:lost,found'],
-            'location' => ['required', 'string', 'max:150'],
-            'lost_found_date' => ['required', 'date', 'before_or_equal:today'],
+            'item_name' => ['required', 'string', 'max:255'],
+            'category_id' => ['nullable', 'exists:categories,id'],
+            'description' => ['required', 'string'],
+            'lost_found_date' => ['required', 'date'],
+            'location' => ['required', 'string', 'max:255'],
             'additional_information' => ['nullable', 'string'],
             'images' => ['nullable', 'array', 'max:5'],
-            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'images.*' => ['image', 'max:5120'],
         ]);
 
-        $data['item_type'] = $type ?: $data['item_type'];
-        $data['user_id'] = Auth::id();
-        $data['date_reported'] = now();
-        $data['item_status'] = 'pending';
+        $item = Item::create([
+            'user_id' => $request->user()->id,
+            'category_id' => $data['category_id'] ?: null,
+            'item_name' => $data['item_name'],
+            'description' => $data['description'],
+            'item_type' => $type,
+            'location' => $data['location'],
+            'lost_found_date' => $data['lost_found_date'],
+            'date_reported' => now(),
+            'item_status' => 'pending',
+            'additional_information' => $data['additional_information'] ?? null,
+        ]);
 
-        $item = Item::create($data);
-        $this->storeImages($request, $item);
-        $item->load(['category', 'user', 'images']);
+        $this->storeImages($item, $request);
 
-        notify_user(
-            $request->user(),
-            'report_submitted',
-            'Report submitted',
-            "Your {$data['item_type']} report for {$item->item_name} has been submitted for review."
-        );
-        log_activity('report_submitted', "Submitted {$data['item_type']} report: {$item->item_name}.", $request->user(), Item::class, $item->id);
+        log_activity('report_submitted', 'Submitted '.($type === 'lost' ? 'lost' : 'found').' report: '.$item->item_name.'.', 'item', $item->id, $request->user());
+
+        foreach (User::where('role', 'admin')->get() as $admin) {
+            notify_user($admin, 'new_report', 'New item report', "{$item->item_name} was reported as {$type}.", ['item_id' => $item->id]);
+        }
 
         return response()->json([
-            'message' => ucfirst($data['item_type']).' item report submitted successfully.',
-            'item' => new ItemResource($item),
+            'message' => 'Report submitted successfully. It will be reviewed by an administrator.',
+            'item' => api_item($item->fresh(), $request->user()),
         ], 201);
     }
 
-    private function storeImages(Request $request, Item $item): void
+    private function storeImages(Item $item, Request $request): void
     {
-        if (! $request->hasFile('images')) {
-            return;
+        $files = $request->file('images', []);
+        if (! is_array($files)) {
+            $files = [$files];
         }
-
-        foreach ($request->file('images') as $index => $file) {
+        foreach ($files as $index => $file) {
+            if (! $file || ! $file->isValid()) {
+                continue;
+            }
             $path = $file->store('items', 'public');
-
             $item->images()->create([
                 'path' => $path,
-                'is_primary' => $index === 0,
+                'is_primary' => $index === 0 && ! $item->images()->exists(),
             ]);
         }
     }
 
-    private function applyFilters($query, Request $request): void
+    public function update(Request $request, int $id): JsonResponse
     {
-        if ($request->filled('q')) {
-            $search = '%'.$request->string('q')->toString().'%';
-            $query->where(function ($q) use ($search) {
-                $q->where('item_name', 'like', $search)
-                    ->orWhere('description', 'like', $search)
-                    ->orWhere('location', 'like', $search);
-            });
-        }
+        $item = Item::findOrFail($id);
+        $this->authorizeOwnerOrAdmin($request, $item);
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->integer('category_id'));
-        }
+        $data = $request->validate([
+            'item_name' => ['required', 'string', 'max:255'],
+            'category_id' => ['nullable', 'exists:categories,id'],
+            'description' => ['required', 'string'],
+            'location' => ['required', 'string', 'max:255'],
+            'lost_found_date' => ['required', 'date'],
+            'additional_information' => ['nullable', 'string'],
+        ]);
 
-        if ($request->filled('item_type')) {
-            $query->where('item_type', $request->input('item_type'));
-        }
+        $data['category_id'] = $data['category_id'] ?: null;
+        $item->update($data);
 
-        if ($request->filled('status')) {
-            $status = $request->input('status');
-            if (in_array($status, self::STATUSES, true)) {
-                $query->where('item_status', $status);
-            }
+        log_activity('report_updated', "Updated report: {$item->item_name}.", 'item', $item->id, $request->user());
+
+        return response()->json(['message' => 'Report updated successfully.', 'item' => api_item($item->fresh(), $request->user())]);
+    }
+
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $item = Item::findOrFail($id);
+        $this->authorizeOwnerOrAdmin($request, $item);
+
+        $name = $item->item_name;
+        foreach ($item->images as $image) {
+            Storage::disk('public')->delete($image->path);
+        }
+        $item->delete();
+
+        log_activity('report_deleted', "Deleted report: {$name}.", 'item', $id, $request->user());
+
+        return response()->json(['message' => 'Report deleted successfully.']);
+    }
+
+    private function authorizeOwnerOrAdmin(Request $request, Item $item): void
+    {
+        if ($request->user()->role !== 'admin' && $item->user_id !== $request->user()->id) {
+            abort(403, 'You are not allowed to modify this report.');
         }
     }
 }

@@ -15,9 +15,9 @@ return new class extends Migration
             $table->text('message');
             $table->enum('status', ['open', 'in_progress', 'closed'])->default('open');
             $table->text('admin_response')->nullable();
+            $table->foreignId('responded_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('responded_at')->nullable();
             $table->timestamps();
-
             $table->index(['user_id', 'status']);
         });
     }

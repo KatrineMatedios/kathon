@@ -41,7 +41,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $other = User::firstOrCreate(
+        $juan = User::firstOrCreate(
             ['email' => 'juan@campusfind.local'],
             [
                 'name' => 'Juan Dela Cruz',
@@ -71,90 +71,39 @@ class DatabaseSeeder extends Seeder
         }
 
         if (Item::count() === 0) {
-            $items = [
-                [
-                    'user_id' => $student->id,
-                    'category_id' => $categories['Electronics']->id,
-                    'item_name' => 'Black Wireless Headphones',
-                    'description' => 'Black over-ear wireless headphones with a slight scratch on the left cup. Includes the original charging cable.',
-                    'item_type' => 'lost',
-                    'location' => 'Main Library, 2nd Floor',
-                    'lost_found_date' => now()->subDays(2),
-                    'item_status' => 'approved',
-                    'additional_information' => 'Last seen near the study tables beside the windows.',
-                ],
-                [
-                    'user_id' => $other->id,
-                    'category_id' => $categories['Bags & Wallets']->id,
-                    'item_name' => 'Brown Leather Wallet',
-                    'description' => 'A brown leather wallet containing student ID and a few cards. No cash reported.',
-                    'item_type' => 'found',
-                    'location' => 'Cafeteria Entrance',
-                    'lost_found_date' => now()->subDay(),
-                    'item_status' => 'approved',
-                    'additional_information' => 'Handed to the cafeteria staff desk.',
-                ],
-                [
-                    'user_id' => $student->id,
-                    'category_id' => $categories['Books & Notes']->id,
-                    'item_name' => 'Calculus Textbook',
-                    'description' => 'Calculus for Engineers, 5th edition. Name written on the inside cover.',
-                    'item_type' => 'lost',
-                    'location' => 'Engineering Building, Room 204',
-                    'lost_found_date' => now()->subDays(4),
-                    'item_status' => 'pending',
-                    'additional_information' => null,
-                ],
-                [
-                    'user_id' => $other->id,
-                    'category_id' => $categories['Keys & Cards']->id,
-                    'item_name' => 'Keychain with Blue Tag',
-                    'description' => 'A set of three keys with a blue campus dormitory tag.',
-                    'item_type' => 'found',
-                    'location' => 'Dormitory B Lobby',
-                    'lost_found_date' => now()->subDays(3),
-                    'item_status' => 'approved',
-                    'additional_information' => 'Found near the entrance door.',
-                ],
-                [
-                    'user_id' => $student->id,
-                    'category_id' => $categories['Clothing']->id,
-                    'item_name' => 'Cream Hoodie',
-                    'description' => 'Cream-colored hoodie with a small logo on the sleeve.',
-                    'item_type' => 'found',
-                    'location' => 'Gymnasium',
-                    'lost_found_date' => now()->subDays(6),
-                    'item_status' => 'returned',
-                    'additional_information' => 'Returned to its owner after verification.',
-                ],
-                [
-                    'user_id' => $other->id,
-                    'category_id' => $categories['Electronics']->id,
-                    'item_name' => 'Silver Flash Drive',
-                    'description' => 'A 32GB silver USB flash drive with a keychain attachment.',
-                    'item_type' => 'lost',
-                    'location' => 'Computer Laboratory 3',
-                    'lost_found_date' => now()->subDays(1),
-                    'item_status' => 'pending',
-                    'additional_information' => null,
-                ],
+            $definitions = [
+                [$student, 'Electronics', 'Black Wireless Headphones', 'Black over-ear wireless headphones with a slight scratch on the left cup. Includes the original charging cable.', 'lost', 'Main Library, 2nd Floor', 'approved', 2, 'Last seen near the study tables beside the windows.'],
+                [$juan, 'Bags & Wallets', 'Brown Leather Wallet', 'A brown leather wallet containing student ID and a few cards. No cash reported.', 'found', 'Cafeteria Entrance', 'approved', 1, 'Handed to the cafeteria staff desk.'],
+                [$student, 'Books & Notes', 'Calculus Textbook', 'Calculus for Engineers, 5th edition. Name written on the inside cover.', 'lost', 'Engineering Building, Room 204', 'pending', 4, null],
+                [$juan, 'Keys & Cards', 'Keychain with Blue Tag', 'A set of three keys with a blue campus dormitory tag.', 'found', 'Dormitory B Lobby', 'approved', 3, 'Found near the entrance door.'],
+                [$student, 'Clothing', 'Cream Hoodie', 'Cream-colored hoodie with a small logo on the sleeve.', 'found', 'Gymnasium', 'returned', 6, 'Returned to its owner after verification.'],
+                [$juan, 'Electronics', 'Silver Flash Drive', 'A 32GB silver USB flash drive with a keychain attachment.', 'lost', 'Computer Laboratory 3', 'pending', 1, null],
             ];
 
-            foreach ($items as $item) {
-                $item['date_reported'] = now()->subDays(rand(0, 5));
-                Item::create($item);
+            foreach ($definitions as [$owner, $categoryName, $name, $description, $type, $location, $status, $daysAgo, $extra]) {
+                Item::create([
+                    'user_id' => $owner->id,
+                    'category_id' => $categories[$categoryName]->id,
+                    'item_name' => $name,
+                    'description' => $description,
+                    'item_type' => $type,
+                    'location' => $location,
+                    'lost_found_date' => now()->subDays($daysAgo),
+                    'date_reported' => now()->subDays(max(0, $daysAgo - 1)),
+                    'item_status' => $status,
+                    'additional_information' => $extra,
+                ]);
             }
         }
 
         $wallet = Item::where('item_name', 'Brown Leather Wallet')->first();
-
         if ($wallet && Claim::count() === 0) {
             Claim::create([
                 'item_id' => $wallet->id,
                 'claimant_id' => $student->id,
                 'reason' => 'The wallet contains my student ID with the name Anne Student. I misplaced it near the cafeteria yesterday.',
                 'status' => 'pending',
-                'verification_code' => strtoupper(Str::random(10)),
+                'verification_code' => strtoupper(Str::random(6)),
             ]);
         }
 
@@ -164,7 +113,6 @@ class DatabaseSeeder extends Seeder
                 'type' => 'welcome',
                 'title' => 'Welcome to CampusFind!',
                 'message' => 'Start by reporting a lost item or browsing recently found items.',
-                'is_read' => false,
             ]);
             Notification::create([
                 'user_id' => $student->id,

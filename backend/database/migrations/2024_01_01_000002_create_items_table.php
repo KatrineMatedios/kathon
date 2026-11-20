@@ -18,8 +18,7 @@ return new class extends Migration
             $table->string('location');
             $table->date('lost_found_date');
             $table->dateTime('date_reported');
-            $table->enum('item_status', ['pending', 'approved', 'rejected', 'returned', 'resolved'])
-                ->default('pending');
+            $table->enum('item_status', ['pending', 'approved', 'rejected', 'returned', 'resolved'])->default('pending');
             $table->text('additional_information')->nullable();
             $table->timestamps();
 

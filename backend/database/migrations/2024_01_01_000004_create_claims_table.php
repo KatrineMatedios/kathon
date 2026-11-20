@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('proof_path')->nullable();
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
             $table->string('verification_code')->unique();
+            $table->timestamp('verified_at')->nullable();
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('reviewed_at')->nullable();
             $table->timestamps();

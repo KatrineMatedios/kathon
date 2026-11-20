@@ -9,25 +9,14 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'name',
-        'student_id',
-        'email',
-        'password',
-        'phone',
-        'profile_photo_path',
-        'role',
-        'is_active',
-        'email_verified_at',
+        'name', 'student_id', 'email', 'password', 'phone',
+        'profile_photo_path', 'role', 'is_active', 'email_verified_at',
     ];
 
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    protected $hidden = ['password', 'remember_token'];
 
     protected function casts(): array
     {
@@ -38,42 +27,8 @@ class User extends Authenticatable
         ];
     }
 
-    protected $appends = ['profile_photo_url'];
-
-    public function getProfilePhotoUrlAttribute(): ?string
-    {
-        return $this->profile_photo_path
-            ? asset('storage/'.$this->profile_photo_path)
-            : null;
-    }
-
-    public function items()
-    {
-        return $this->hasMany(Item::class);
-    }
-
-    public function claims()
-    {
-        return $this->hasMany(Claim::class, 'claimant_id');
-    }
-
-    public function notifications()
-    {
-        return $this->hasMany(Notification::class);
-    }
-
-    public function activityLogs()
-    {
-        return $this->hasMany(ActivityLog::class);
-    }
-
-    public function supportTickets()
-    {
-        return $this->hasMany(SupportTicket::class);
-    }
-
-    public function isAdmin(): bool
-    {
-        return $this->role === 'admin';
-    }
+    public function items() { return $this->hasMany(Item::class); }
+    public function claims() { return $this->hasMany(Claim::class, 'claimant_id'); }
+    public function notifications() { return $this->hasMany(Notification::class); }
+    public function activityLogs() { return $this->hasMany(ActivityLog::class); }
 }

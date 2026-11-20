@@ -3,28 +3,29 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\UserResource;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
-    public function register(Request $request)
+    public function register(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
-            'student_id' => ['required', 'string', 'max:50', 'unique:users,student_id'],
-            'email' => ['required', 'email:rfc', 'max:150', 'unique:users,email'],
+            'name' => ['required', 'string', 'max:255'],
+            'student_id' => ['nullable', 'string', 'max:100', 'unique:users,student_id'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
         $user = User::create([
             'name' => $data['name'],
-            'student_id' => strtoupper($data['student_id']),
-            'email' => strtolower($data['email']),
+            'student_id' => $data['student_id'],
+            'email' => $data['email'],
             'password' => $data['password'],
             'role' => 'student',
             'is_active' => true,
@@ -33,129 +34,105 @@ class AuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        notify_user(
-            $user,
-            'account_created',
-            'Welcome to CampusFind!',
-            'Your account is ready. You can now report and browse lost items.'
-        );
-        log_activity('registered', 'Created a new student account.', $user, User::class, $user->id);
+        log_activity('registered', 'Created a new student account.', 'user', $user->id, $user);
 
-        return response()->json([
-            'message' => 'Account created successfully.',
-            'user' => new UserResource($user),
-        ], 201);
+        return response()->json(['user' => api_user($user)], 201);
     }
 
-    public function login(Request $request)
+    public function login(Request $request): JsonResponse
     {
-        $credentials = $request->validate([
+        $data = $request->validate([
             'login' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
 
-        $field = filter_var($credentials['login'], FILTER_VALIDATE_EMAIL) ? 'email' : 'student_id';
-        $attempt = [
-            $field => $field === 'student_id' ? strtoupper($credentials['login']) : strtolower($credentials['login']),
-            'password' => $credentials['password'],
-        ];
+        $login = trim($data['login']);
+        $field = filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'student_id';
 
-        if (! Auth::attempt($attempt)) {
-            return response()->json(['message' => 'Invalid email/student ID or password.'], 422);
+        if (! Auth::attempt([$field => $login, 'password' => $data['password']])) {
+            return response()->json(['message' => 'The provided credentials are incorrect.'], 422);
         }
 
-        /** @var User $user */
         $user = Auth::user();
 
         if (! $user->is_active) {
             Auth::logout();
-            $request->session()->invalidate();
-
-            return response()->json(['message' => 'This account has been deactivated. Please contact support.'], 403);
+            return response()->json(['message' => 'This account has been deactivated.'], 403);
         }
 
         $request->session()->regenerate();
-        log_activity('logged_in', 'Signed in to CampusFind.', $user);
 
-        return response()->json([
-            'message' => 'Signed in successfully.',
-            'user' => new UserResource($user),
-        ]);
+        log_activity('logged_in', 'Signed in successfully.', 'user', $user->id, $user);
+
+        return response()->json(['user' => api_user($user)]);
     }
 
-    public function logout(Request $request)
+    public function user(Request $request): JsonResponse
     {
-        if (Auth::check()) {
-            log_activity('logged_out', 'Signed out of CampusFind.', Auth::user());
-        }
+        return response()->json(['user' => api_user($request->user())]);
+    }
+
+    public function logout(Request $request): JsonResponse
+    {
+        log_activity('logged_out', 'Signed out.', 'user', $request->user()?->id, $request->user());
 
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return response()->json(['message' => 'Signed out successfully.']);
+        return response()->json(['message' => 'Logged out successfully.']);
     }
 
-    public function user(Request $request)
+    public function forgotPassword(Request $request): JsonResponse
     {
-        return response()->json(['user' => new UserResource($request->user())]);
-    }
+        $data = $request->validate(['email' => ['required', 'email']]);
+        $user = User::where('email', $data['email'])->first();
 
-    public function forgotPassword(Request $request)
-    {
-        $request->validate(['email' => ['required', 'email']]);
-
-        $status = Password::broker()->sendResetLink($request->only('email'));
-
-        if ($status === Password::RESET_LINK_SENT) {
-            return response()->json(['message' => 'Password reset instructions have been sent.']);
+        if ($user) {
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $user->email],
+                ['token' => Hash::make(Str::random(60)), 'created_at' => now()]
+            );
         }
 
-        return response()->json(['message' => 'We could not send a reset link to that email address.'], 422);
+        return response()->json(['message' => 'If the email exists, a reset token has been created.']);
     }
 
-    public function resetPassword(Request $request)
+    public function developmentResetToken(Request $request): JsonResponse
     {
-        $request->validate([
-            'token' => ['required', 'string'],
+        $data = $request->validate(['email' => ['required', 'email']]);
+        $row = DB::table('password_reset_tokens')->where('email', $data['email'])->first();
+
+        if (! $row) {
+            return response()->json(['message' => 'No reset token found for this email.'], 404);
+        }
+
+        return response()->json(['token' => $row->token, 'email' => $data['email']]);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $data = $request->validate([
             'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $status = Password::broker()->reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user, string $password) {
-                $user->forceFill(['password' => Hash::make($password)])->save();
-                $user->tokens()->delete();
-                log_activity('password_reset', 'Reset account password.', $user);
-            }
-        );
+        $row = DB::table('password_reset_tokens')->where('email', $data['email'])->first();
 
-        if ($status === Password::PASSWORD_RESET) {
-            return response()->json(['message' => 'Password reset successfully. Please sign in.']);
+        if (! $row || ! Hash::check($data['token'], $row->token)) {
+            return response()->json([
+                'message' => 'The reset token is invalid.',
+                'errors' => ['token' => ['The reset token is invalid or has expired.']],
+            ], 422);
         }
 
-        return response()->json(['message' => 'This password reset token is invalid or has expired.'], 422);
-    }
+        $user = User::where('email', $data['email'])->firstOrFail();
+        $user->update(['password' => $data['password']]);
+        DB::table('password_reset_tokens')->where('email', $data['email'])->delete();
 
-    /**
-     * Local development helper: returns a reset token without sending email.
-     * Remove or protect this endpoint in production.
-     */
-    public function developmentResetToken(Request $request)
-    {
-        $request->validate(['email' => ['required', 'email']]);
+        log_activity('password_reset', 'Reset account password.', 'user', $user->id, $user);
 
-        $user = User::where('email', strtolower($request->email))->first();
-
-        if (! $user) {
-            return response()->json(['message' => 'No account found with that email.'], 404);
-        }
-
-        return response()->json([
-            'message' => 'Development reset token generated.',
-            'token' => Password::broker()->createToken($user),
-            'email' => $user->email,
-        ]);
+        return response()->json(['message' => 'Password reset successfully.']);
     }
 }

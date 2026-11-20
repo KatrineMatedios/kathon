@@ -1,30 +1,15 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    $file = public_path('index.html');
+// Serve the built React SPA (copied into public/ by the Docker image) for all
+// non-API routes so client-side routing works on refresh.
+Route::get('/{any?}', function () {
+    $index = public_path('index.html');
 
-    if (! file_exists($file)) {
-        abort(404);
+    if (is_file($index)) {
+        return response()->file($index);
     }
 
-    return response()->file($file);
-});
-
-// Serve the built React SPA for client-side routes such as /home, /browse,
-// /admin, etc. API and Sanctum routes are matched before this fallback.
-Route::fallback(function (Request $request) {
-    if ($request->is('api/*') || $request->is('sanctum/*')) {
-        abort(404);
-    }
-
-    $file = public_path('index.html');
-
-    if (! file_exists($file)) {
-        abort(404);
-    }
-
-    return response()->file($file);
-});
+    return view('welcome');
+})->where('any', '.*');
