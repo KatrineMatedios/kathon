@@ -36,7 +36,10 @@ class AuthController extends Controller
 
         log_activity('registered', 'Created a new student account.', 'user', $user->id, $user);
 
-        return response()->json(['user' => api_user($user)], 201);
+        // Also issue a Sanctum token so token-based clients work alongside the SPA cookie flow.
+        $token = $user->createToken('campusfind')->plainTextToken;
+
+        return response()->json(['user' => api_user($user), 'token' => $token], 201);
     }
 
     public function login(Request $request): JsonResponse
@@ -64,7 +67,10 @@ class AuthController extends Controller
 
         log_activity('logged_in', 'Signed in successfully.', 'user', $user->id, $user);
 
-        return response()->json(['user' => api_user($user)]);
+        // Also issue a Sanctum token so token-based clients work alongside the SPA cookie flow.
+        $token = $user->createToken('campusfind')->plainTextToken;
+
+        return response()->json(['user' => api_user($user), 'token' => $token]);
     }
 
     public function user(Request $request): JsonResponse
@@ -75,6 +81,12 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         log_activity('logged_out', 'Signed out.', 'user', $request->user()?->id, $request->user());
+
+        // Token clients revoke the token; SPA cookie sessions are cleared below.
+        $token = $request->user()?->currentAccessToken();
+        if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            $token->delete();
+        }
 
         Auth::guard('web')->logout();
         $request->session()->invalidate();
