@@ -1,0 +1,9 @@
+.git
+.gitignore
+.vercel
+**/node_modules
+**/dist
+**/.env.local
+backend/vendor
+backend/storage
+backend/public/assets
