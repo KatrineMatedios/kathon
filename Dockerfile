@@ -44,10 +44,12 @@ COPY backend/ ./
 
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader \
  && cp -n .env.example .env \
+ && sed -i 's|^DB_CONNECTION=.*|DB_CONNECTION=mysql|' .env \
  && sed -i 's|^DB_HOST=.*|DB_HOST=127.0.0.1|' .env \
  && sed -i 's|^DB_DATABASE=.*|DB_DATABASE=campus_lost_found|' .env \
  && sed -i 's|^DB_USERNAME=.*|DB_USERNAME=root|' .env \
  && sed -i 's|^DB_PASSWORD=.*|DB_PASSWORD=|' .env \
+ && sed -i 's|^SESSION_DRIVER=.*|SESSION_DRIVER=file|' .env \
  && sed -i 's|^SESSION_DOMAIN=.*|SESSION_DOMAIN=|' .env \
  && mkdir -p storage/framework/cache/data storage/framework/sessions \
             storage/framework/views storage/logs bootstrap/cache /run/mysqld \

@@ -17,9 +17,3 @@ services:
         value: "false"
       - key: APP_KEY
         value: base64:AisSeds8ZvYuLV0jPMGXHtvsVQxCINiSJ+ogE8/fGBE=
-      - key: APP_URL
-        sync: false
-      - key: CORS_ALLOWED_ORIGINS
-        sync: false
-      - key: SANCTUM_STATEFUL_DOMAINS
-        sync: false

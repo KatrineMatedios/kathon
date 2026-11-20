@@ -33,6 +33,18 @@ elif ! grep -q '^APP_KEY=base64:' .env 2>/dev/null; then
     php artisan key:generate --force
 fi
 
+# ---- Host / origin (auto-detect on Render) ----
+if [ -n "${RENDER_EXTERNAL_URL:-}" ]; then
+    HOST=$(printf '%s' "$RENDER_EXTERNAL_URL" | sed -E 's#^https?://##; s#[/:].*$##')
+    sed -i "s|^APP_URL=.*|APP_URL=${RENDER_EXTERNAL_URL}|" .env
+    grep -q '^SANCTUM_STATEFUL_DOMAINS=' .env 2>/dev/null \
+        && sed -i "s|^SANCTUM_STATEFUL_DOMAINS=.*|SANCTUM_STATEFUL_DOMAINS=${HOST}|" .env \
+        || printf 'SANCTUM_STATEFUL_DOMAINS=%s\n' "$HOST" >> .env
+    grep -q '^CORS_ALLOWED_ORIGINS=' .env 2>/dev/null \
+        && sed -i "s|^CORS_ALLOWED_ORIGINS=.*|CORS_ALLOWED_ORIGINS=${RENDER_EXTERNAL_URL}|" .env \
+        || printf 'CORS_ALLOWED_ORIGINS=%s\n' "$RENDER_EXTERNAL_URL" >> .env
+fi
+
 # ---- Database ----
 php artisan migrate --force
 
