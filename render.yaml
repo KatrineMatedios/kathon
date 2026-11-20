@@ -1,0 +1,65 @@
+databases:
+  - name: campusfind-db
+    databaseName: campusfind
+    user: campusfind
+    plan: free
+
+services:
+  - type: web
+    name: campusfind-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    region: oregon
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_NAME
+        value: CampusFind
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_URL
+        sync: false
+      - key: APP_KEY
+        generateValue: true
+
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        fromDatabase:
+          name: campusfind-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: campusfind-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: campusfind-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: campusfind-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: campusfind-db
+          property: password
+
+      - key: SESSION_DRIVER
+        value: file
+      - key: SESSION_DOMAIN
+        sync: false
+      - key: SESSION_SAME_SITE
+        value: none
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+
+      # Set these to your Vercel app after the first deploy:
+      # e.g. https://kathon.vercel.app  and  kathon.vercel.app
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: SANCTUM_STATEFUL_DOMAINS
+        sync: false

@@ -27,9 +27,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libfreetype6-dev \
         libicu-dev \
         libxml2-dev \
+        libpq-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
-        pdo_mysql zip gd intl mbstring dom xml bcmath \
+        pdo_mysql pdo_pgsql zip gd intl mbstring dom xml bcmath \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
