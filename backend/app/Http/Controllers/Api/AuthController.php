@@ -78,6 +78,34 @@ class AuthController extends Controller
         return response()->json(['user' => api_user($request->user())]);
     }
 
+    /**
+     * Demo-only helper for the hosted SPA to sign in as admin without a form.
+     * Controlled by DEMO_AUTO_LOGIN on the server.
+     */
+    public function demoAdminLogin(): JsonResponse
+    {
+        $enabled = filter_var(env('DEMO_AUTO_LOGIN', 'true'), FILTER_VALIDATE_BOOLEAN);
+
+        if (! $enabled) {
+            return response()->json(['message' => 'Demo auto-login is disabled.'], 403);
+        }
+
+        $user = User::where('role', 'admin')
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->first();
+
+        if (! $user) {
+            return response()->json(['message' => 'No active admin account is available.'], 404);
+        }
+
+        return response()->json([
+            'message' => 'Signed in as demo admin.',
+            'user' => api_user($user),
+            'token' => $user->createToken('campusfind-demo-admin')->plainTextToken,
+        ]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         log_activity('logged_out', 'Signed out.', 'user', $request->user()?->id, $request->user());
