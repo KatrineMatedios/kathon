@@ -108,29 +108,29 @@ docker run -p 8080:80 campusfind
 
 ## Docker + MySQL (simple deployment)
 
-The full app — React UI, Laravel API, and MySQL — runs in Docker. There are two ways:
+The full app — React UI, Laravel API, and MariaDB (MySQL) — runs in **one container**. No separate database or DB URL needed.
 
 ### Locally (easiest)
 
 ```powershell
-docker compose up --build
+docker build -t campusfind .
+docker run -p 8080:80 campusfind
 ```
 
-Open `http://localhost:8080`. MariaDB (MySQL-compatible) is included automatically, and the demo accounts are seeded on first run.
+Open `http://localhost:8080`. The database is created, migrated, and seeded automatically on first start.
+
+Or use `docker compose up --build` if you prefer a separate database service.
 
 ### On a host such as Render
 
-Use the included `render.yaml` (Blueprint). It builds `backend/Dockerfile` — the whole app on one service — with MySQL. Add your MySQL connection values when prompted:
+Use the included `render.yaml` (Blueprint). It builds the root `Dockerfile` — the whole app including MariaDB — so there are **no database values to fill in**. Only set:
 
 | Key | Value |
 |---|---|
 | `APP_URL` | your service URL |
-| `DB_HOST` | your MySQL host |
-| `DB_USERNAME` | your MySQL user |
-| `DB_PASSWORD` | your MySQL password |
 | `CORS_ALLOWED_ORIGINS` | only if the UI is on a different domain |
 
-`DB_PORT` defaults to `3306` and `DB_DATABASE` to `campus_lost_found`.
+> Note: data lives inside the container, so it resets when the container restarts. For permanent data, use `backend/Dockerfile` with an external MySQL host instead.
 
 ## Demo accounts
 

@@ -2,7 +2,7 @@ services:
   - type: web
     name: campusfind
     runtime: docker
-    dockerfilePath: ./backend/Dockerfile
+    dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: free
     region: oregon
@@ -19,25 +19,6 @@ services:
         value: base64:AisSeds8ZvYuLV0jPMGXHtvsVQxCINiSJ+ogE8/fGBE=
       - key: APP_URL
         sync: false
-
-      # MySQL - paste values from your MySQL host
-      - key: DB_CONNECTION
-        value: mysql
-      - key: DB_HOST
-        sync: false
-      - key: DB_PORT
-        value: "3306"
-      - key: DB_DATABASE
-        value: campus_lost_found
-      - key: DB_USERNAME
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-
-      - key: SESSION_DRIVER
-        value: file
-      - key: SESSION_DOMAIN
-        value: ""
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: SANCTUM_STATEFUL_DOMAINS
